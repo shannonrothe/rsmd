@@ -34,10 +34,7 @@ impl Lexer {
                             if buffer.len() < 7 {
                                 self.read();
                                 let remainder = self.consume_until(|c| c == '\n');
-                                tokens.push(Token::Heading((
-                                    buffer,
-                                    remainder,
-                                )));
+                                tokens.push(Token::Heading((buffer, remainder)));
                             } else {
                                 let remainder = self.consume_until(|c| c == '\n');
                                 buffer.push_str(&remainder);

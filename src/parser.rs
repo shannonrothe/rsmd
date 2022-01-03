@@ -1,31 +1,5 @@
-use std::fmt::Display;
-
+use crate::html::Tag;
 use crate::token::Token;
-
-#[derive(Debug, PartialEq)]
-pub struct Tag {
-    pub name: String,
-    pub text: String,
-}
-
-impl Tag {
-    pub fn as_html(&self) -> String {
-        let tag_name = &self.name;
-        let opening_tag = format!("<{}>", tag_name);
-        let closing_tag = format!("</{}>", tag_name);
-        let mut html = String::from(&opening_tag);
-        html.push_str(&self.text);
-        html.push_str(&closing_tag);
-
-        html
-    }
-}
-
-impl Display for Tag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_html())
-    }
-}
 
 pub type Program = Vec<Tag>;
 

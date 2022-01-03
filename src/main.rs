@@ -6,6 +6,7 @@ use std::path::Path;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 
+mod html;
 mod lexer;
 mod parser;
 mod token;
@@ -26,7 +27,7 @@ fn parse_file(filename: &String) -> io::Result<()> {
 
     if let Ok(program) = parser.parse() {
         for tag in program.iter() {
-            out_file.write_all(&format!("{}", tag).as_bytes())?;
+            out_file.write_all(&format!("{}\n", tag).as_bytes())?;
         }
     }
 
