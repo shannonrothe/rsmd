@@ -29,16 +29,8 @@ impl Display for Tag {
 
 pub type Program = Vec<Tag>;
 
-fn heading_pattern_to_name(pattern: &str) -> &str {
-    match pattern {
-        "#" => "h1",
-        "##" => "h2",
-        "###" => "h3",
-        "####" => "h4",
-        "#####" => "h5",
-        "######" => "h6",
-        _ => unreachable!(),
-    }
+fn heading_pattern_to_name(pattern: &str) -> String {
+    format!("h{}", pattern.chars().count())
 }
 
 #[derive(Debug)]
@@ -58,16 +50,20 @@ impl Parser {
             match token {
                 Token::Heading((pattern, text)) => {
                     program.push(Tag {
-                        name: heading_pattern_to_name(pattern).to_string(),
-                        text: text.clone(),
+                        name: heading_pattern_to_name(pattern),
+                        text: String::from(text),
                     });
                 }
                 Token::Paragraph(text) => {
                     program.push(Tag {
-                        name: "p".to_string(),
-                        text: text.clone(),
+                        name: String::from("p"),
+                        text: String::from(text),
                     });
                 }
+                Token::Code(code) => program.push(Tag {
+                    name: String::from("code"),
+                    text: String::from(code),
+                }),
             }
         }
 

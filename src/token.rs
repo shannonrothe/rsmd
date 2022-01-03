@@ -4,4 +4,5 @@ type Heading = (String, String);
 pub enum Token {
     Heading(Heading),
     Paragraph(String),
+    Code(String),
 }

@@ -1,10 +1,10 @@
 use std::env;
-use std::io::{self, Write, Read};
 use std::fs::File;
+use std::io::{self, Read, Write};
 use std::path::Path;
 
-use crate::lexer::{Lexer};
-use crate::parser::{Parser};
+use crate::lexer::Lexer;
+use crate::parser::Parser;
 
 mod lexer;
 mod parser;
@@ -23,7 +23,7 @@ fn parse_file(filename: &String) -> io::Result<()> {
     let mut out_file = File::create(output_filename)?;
     let mut lexer = Lexer::new(input.as_str());
     let mut parser = Parser::new(lexer.lex());
-    
+
     if let Ok(program) = parser.parse() {
         for tag in program.iter() {
             out_file.write_all(&format!("{}", tag).as_bytes())?;
@@ -54,6 +54,6 @@ fn main() -> io::Result<()> {
         _ => {
             print_help();
             Ok(())
-        },
+        }
     }
 }
