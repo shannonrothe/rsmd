@@ -27,11 +27,11 @@ impl Lexer {
                 '#' => {
                     let mut buffer = String::from(self.char);
                     self.read();
-                    buffer.push_str(&self.consume_until(|b, c| b.len() < 7 && c == '#'));
+                    buffer.push_str(&self.consume_until(|b, c| b.len() >= 7 || c != '#'));
 
                     // TODO: This is a weird way to approach it?
                     if buffer.len() == 7 {
-                        let remainder = self.consume_until(|_, c| c != '\n');
+                        let remainder = self.consume_until(|_, c| c == '\n');
                         buffer.push_str(&remainder);
                         tokens.push(Token::Paragraph(buffer));
                     } else {
@@ -40,7 +40,7 @@ impl Lexer {
                                 self.read();
                                 tokens.push(Token::Heading((
                                     buffer,
-                                    self.consume_until(|_, c| c != '\n'),
+                                    self.consume_until(|_, c| c == '\n'),
                                 )));
                             }
                             // Treat as string
@@ -48,8 +48,14 @@ impl Lexer {
                         }
                     }
                 }
+                '`' => {
+                    self.read();
+                    let buffer = self.consume_until(|_b, c| c == '`');
+                    self.read();
+                    tokens.push(Token::Code(buffer));
+                }
                 _ if self.char.is_ascii_alphanumeric() => {
-                    let buffer = self.consume_until(|_b, c| c != '\n');
+                    let buffer = self.consume_until(|_b, c| c == '\n');
                     tokens.push(Token::Paragraph(buffer));
                 }
                 '\n' => {
@@ -67,7 +73,7 @@ impl Lexer {
     fn consume_until(&mut self, accept: impl Fn(&str, char) -> bool) -> String {
         let mut buffer = String::new();
 
-        while self.pointer < self.source.len() && accept(&buffer, self.char) {
+        while self.pointer < self.source.len() && !accept(&buffer, self.char) {
             buffer.push(self.char);
             self.read();
         }
@@ -165,6 +171,17 @@ mod tests {
             vec![
                 Token::Heading(("#".to_string(), "Hello World".to_string())),
                 Token::Paragraph("This is the body.".to_string())
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_code() {
+        assert_eq!(
+            Lexer::new("# Hello world\n`struct Foo {}`").lex(),
+            vec![
+                Token::Heading(("#".to_string(), "Hello world".to_string())),
+                Token::Code("struct Foo {}".to_string())
             ],
         );
     }
