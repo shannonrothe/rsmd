@@ -30,9 +30,7 @@ impl Display for Tag {
 pub type Program = Vec<Tag>;
 
 fn heading_pattern_to_name(pattern: &str) -> String {
-    let count = pattern.chars().count().to_string();
-    let name = format!("h{}", count);
-    name
+    format!("h{}", pattern.chars().count())
 }
 
 #[derive(Debug)]
