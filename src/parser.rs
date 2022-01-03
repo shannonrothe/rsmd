@@ -8,27 +8,35 @@ pub struct Tag {
     pub text: String,
 }
 
+impl Tag {
+    pub fn as_html(&self) -> String {
+        let tag_name = &self.name;
+        let opening_tag = format!("<{}>", tag_name);
+        let closing_tag = format!("</{}>", tag_name);
+        let mut html = String::from(&opening_tag);
+        html.push_str(&self.text);
+        html.push_str(&closing_tag);
+
+        html
+    }
+}
+
 impl Display for Tag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let tag_name = self.name.as_str();
-        let mut t = String::from(format!("<{}>", tag_name).as_str());
-        t.push_str(self.text.as_str());
-        t.push_str(format!("</{}>", tag_name).as_str());
-
-        write!(f, "{}", t)
+        write!(f, "{}", self.as_html())
     }
 }
 
 pub type Program = Vec<Tag>;
 
-fn heading_pattern_to_name(pattern: &str) -> String {
+fn heading_pattern_to_name(pattern: &str) -> &str {
     match pattern {
-        "#" => "h1".to_string(),
-        "##" => "h2".to_string(),
-        "###" => "h3".to_string(),
-        "####" => "h4".to_string(),
-        "#####" => "h5".to_string(),
-        "######" => "h6".to_string(),
+        "#" => "h1",
+        "##" => "h2",
+        "###" => "h3",
+        "####" => "h4",
+        "#####" => "h5",
+        "######" => "h6",
         _ => unreachable!(),
     }
 }
@@ -50,7 +58,7 @@ impl Parser {
             match token {
                 Token::Heading((pattern, text)) => {
                     program.push(Tag {
-                        name: heading_pattern_to_name(pattern),
+                        name: heading_pattern_to_name(pattern).to_string(),
                         text: text.clone(),
                     });
                 }
