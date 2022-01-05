@@ -1,8 +1,19 @@
-type Heading = (String, String);
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum ListType {
+    Unordered,
+    Ordered,
+}
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Token {
-    Heading(Heading),
-    Paragraph(String),
+    Heading(String),
+    Text(String),
+    Strong(String),
+    Em(String),
+
     Code(String),
+
+    List(ListType),
+
+    NewLine,
 }

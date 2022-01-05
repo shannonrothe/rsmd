@@ -1,87 +1,160 @@
-use crate::token::Token;
+use std::str;
 
-#[derive(Debug)]
+use crate::token::{ListType, Token};
+
+#[derive(Clone, Debug)]
 pub struct Lexer {
-    source: Vec<char>,
+    source: String,
     pointer: usize,
-    char: char,
+    slice: u8,
 }
+
+const MAX_HEADING_LEVEL: u8 = 7;
 
 impl Lexer {
     pub fn new(input: &str) -> Self {
         let mut s = Self {
-            source: input.chars().collect(),
+            source: input.to_string(),
             pointer: 0,
-            char: '\0',
+            slice: b'\0',
         };
 
-        s.char = s.source[s.pointer];
+        s.slice = s.source.as_bytes()[s.pointer];
         s
     }
 
-    pub fn lex(&mut self) -> Vec<Token> {
-        let mut tokens = Vec::new();
+    pub fn next_token(&mut self) -> Token {
+        match self.slice {
+            _ if self.slice.is_ascii_digit() => {
+                self.advance();
 
-        while self.pointer < self.source.len() {
-            match self.char {
-                '#' => {
-                    let mut buffer = String::from(self.char);
-                    self.read();
-                    buffer.push_str(&self.consume_until(|c| c.is_ascii_whitespace()));
-
-                    match self.char {
-                        _ if self.char.is_ascii_whitespace() => {
-                            if buffer.len() < 7 {
-                                self.read();
-                                let remainder = self.consume_until(|c| c == '\n');
-                                tokens.push(Token::Heading((buffer, remainder)));
-                            } else {
-                                let remainder = self.consume_until(|c| c == '\n');
-                                buffer.push_str(&remainder);
-                                tokens.push(Token::Paragraph(buffer));
-                            }
-                        }
-                        // Treat as string
-                        _ => todo!(),
-                    }
-                }
-                '`' => {
-                    self.read();
-                    let buffer = self.consume_until(|c| c == '`');
-                    self.read();
-                    tokens.push(Token::Code(buffer));
-                }
-                _ if self.char.is_ascii_alphanumeric() => {
-                    let buffer = self.consume_until(|c| c == '\n');
-                    tokens.push(Token::Paragraph(buffer));
-                }
-                '\n' => {
-                    self.read();
-                }
-                _ => {
-                    self.read();
+                if self.slice == b'.' {
+                    self.advance();
+                    self.advance();
+                    Token::List(ListType::Ordered)
+                } else {
+                    let buffer = self.consume_until_one_of(&[b'\n', b'*', b'_', b'`']);
+                    Token::Text(buffer)
                 }
             }
-        }
+            b'#' => {
+                let mut heading = self.consume_until_not_one_of(&[b'#']);
+                if heading.len() >= MAX_HEADING_LEVEL.into() {
+                    let remainder = self.consume_until_one_of(&[b'\n']);
+                    heading.push_str(&remainder);
+                    Token::Text(heading)
+                } else {
+                    self.advance();
+                    Token::Heading(heading)
+                }
+            }
+            b'`' => {
+                self.advance();
+                let buffer = self.consume_until_one_of(&[b'`']);
+                self.advance();
+                Token::Code(buffer)
+            }
+            b'_' => {
+                self.advance();
+                let buffer = self.consume_until_one_of(&[b'_']);
+                self.advance();
+                Token::Em(buffer)
+            }
+            b'-' => {
+                self.advance();
 
-        tokens
+                match self.slice {
+                    _ if self.slice.is_ascii_whitespace() => {
+                        self.advance();
+                        Token::List(ListType::Unordered)
+                    }
+                    _ => {
+                        let buffer = self.consume_until_one_of(&[b'\n', b'*', b'_']);
+                        Token::Text(buffer)
+                    }
+                }
+            }
+            b'*' => {
+                self.advance();
+
+                match self.slice {
+                    _ if self.slice.is_ascii_whitespace() => {
+                        self.advance();
+                        Token::List(ListType::Unordered)
+                    }
+                    b'*' => {
+                        self.advance();
+                        let buffer = self.consume_until_one_of(&[b'*']);
+                        self.advance();
+                        self.advance();
+                        // println!("strong! {}", buffer);
+                        Token::Strong(buffer)
+                    }
+                    _ => {
+                        let buffer = self.consume_until_one_of(&[b'\n', b'*']);
+                        match self.slice {
+                            b'\n' => {
+                                self.advance();
+                                Token::Text(buffer)
+                            }
+                            b'*' => {
+                                self.advance();
+                                Token::Em(buffer)
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                }
+            }
+            b'\n' => {
+                self.advance();
+                Token::NewLine
+            }
+            _ => {
+                let buffer = self.consume_until_one_of(&[b'\n', b'*', b'_', b'`']);
+                Token::Text(buffer)
+            }
+        }
     }
 
-    fn consume_until(&mut self, accept: impl Fn(char) -> bool) -> String {
+    fn consume_until_one_of(&mut self, one_of: &[u8]) -> String {
         let mut buffer = String::new();
 
-        while self.pointer < self.source.len() && !accept(self.char) {
-            buffer.push(self.char);
-            self.read();
+        while self.pointer < self.source.len() && !one_of.contains(&self.slice) {
+            buffer.push_str(&self.source[self.pointer..self.pointer + 1]);
+            self.advance();
         }
 
         buffer
     }
 
-    fn read(&mut self) {
+    fn consume_until_not_one_of(&mut self, one_of: &[u8]) -> String {
+        let mut buffer = String::new();
+
+        while self.pointer < self.source.len() && one_of.contains(&self.slice) {
+            buffer.push_str(&self.source[self.pointer..self.pointer + 1]);
+            self.advance();
+        }
+
+        buffer
+    }
+
+    fn advance(&mut self) {
         self.pointer += 1;
         if self.pointer < self.source.len() {
-            self.char = self.source[self.pointer];
+            self.slice = self.source.as_bytes()[self.pointer];
+        }
+    }
+}
+
+impl Iterator for Lexer {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pointer >= self.source.len() {
+            None
+        } else {
+            Some(self.next_token())
         }
     }
 }
@@ -92,94 +165,142 @@ mod tests {
 
     #[test]
     fn tokenizes_h1() {
-        assert_eq!(
-            Lexer::new("# Hello World").lex(),
-            vec![Token::Heading(("#".to_string(), "Hello World".to_string()))]
-        );
+        let mut iter = Lexer::new("# Hello World").into_iter();
+        assert_eq!(Some(Token::Heading("#".to_string())), iter.next());
+        assert_eq!(Some(Token::Text("Hello World".to_string())), iter.next());
     }
 
     #[test]
     fn tokenizes_h2() {
-        assert_eq!(
-            Lexer::new("## Hello World").lex(),
-            vec![Token::Heading((
-                "##".to_string(),
-                "Hello World".to_string()
-            ))]
-        );
+        let mut iter = Lexer::new("## Hello World").into_iter();
+        assert_eq!(Some(Token::Heading("##".to_string())), iter.next());
+        assert_eq!(Some(Token::Text("Hello World".to_string())), iter.next());
     }
 
     #[test]
     fn tokenizes_h3() {
-        assert_eq!(
-            Lexer::new("### Hello World").lex(),
-            vec![Token::Heading((
-                "###".to_string(),
-                "Hello World".to_string()
-            ))]
-        );
+        let mut iter = Lexer::new("### Hello World").into_iter();
+        assert_eq!(Some(Token::Heading("###".to_string())), iter.next());
+        assert_eq!(Some(Token::Text("Hello World".to_string())), iter.next());
     }
 
     #[test]
     fn tokenizes_h4() {
-        assert_eq!(
-            Lexer::new("#### Hello World").lex(),
-            vec![Token::Heading((
-                "####".to_string(),
-                "Hello World".to_string()
-            ))]
-        );
+        let mut iter = Lexer::new("#### Hello World").into_iter();
+        assert_eq!(Some(Token::Heading("####".to_string())), iter.next());
+        assert_eq!(Some(Token::Text("Hello World".to_string())), iter.next());
     }
 
     #[test]
     fn tokenizes_h5() {
-        assert_eq!(
-            Lexer::new("##### Hello World").lex(),
-            vec![Token::Heading((
-                "#####".to_string(),
-                "Hello World".to_string()
-            ))]
-        );
+        let mut iter = Lexer::new("##### Hello World").into_iter();
+        assert_eq!(Some(Token::Heading("#####".to_string())), iter.next());
+        assert_eq!(Some(Token::Text("Hello World".to_string())), iter.next());
     }
 
     #[test]
     fn tokenizes_h6() {
-        assert_eq!(
-            Lexer::new("###### Hello World").lex(),
-            vec![Token::Heading((
-                "######".to_string(),
-                "Hello World".to_string()
-            ))]
-        );
+        let mut iter = Lexer::new("###### Hello World").into_iter();
+        assert_eq!(Some(Token::Heading("######".to_string())), iter.next());
+        assert_eq!(Some(Token::Text("Hello World".to_string())), iter.next());
     }
 
     #[test]
     fn parses_h7_as_paragraph() {
+        let mut iter = Lexer::new("####### Hello World").into_iter();
         assert_eq!(
-            Lexer::new("####### Hello World").lex(),
-            vec![Token::Paragraph("####### Hello World".to_string())]
+            Some(Token::Text("####### Hello World".to_string())),
+            iter.next()
         );
     }
 
     #[test]
-    fn parses_h1_with_body() {
+    fn h1_with_body() {
+        let mut iter = Lexer::new("# Hello World\nThis is the body.").into_iter();
+        assert_eq!(Some(Token::Heading("#".to_string())), iter.next());
+        assert_eq!(Some(Token::Text("Hello World".to_string())), iter.next());
+        assert_eq!(Some(Token::NewLine), iter.next());
         assert_eq!(
-            Lexer::new("# Hello World\nThis is the body.").lex(),
-            vec![
-                Token::Heading(("#".to_string(), "Hello World".to_string())),
-                Token::Paragraph("This is the body.".to_string())
-            ],
+            Some(Token::Text("This is the body.".to_string())),
+            iter.next()
         );
     }
 
     #[test]
-    fn parses_code() {
+    fn tokenizes_code() {
+        let mut iter = Lexer::new("# Hello world\n`struct Foo {}`").into_iter();
+        assert_eq!(Some(Token::Heading("#".to_string())), iter.next());
+        assert_eq!(Some(Token::Text("Hello world".to_string())), iter.next());
+        assert_eq!(Some(Token::NewLine), iter.next());
+        assert_eq!(Some(Token::Code("struct Foo {}".to_string())), iter.next());
+    }
+
+    #[test]
+    fn tokenizes_bold_within_paragraph() {
+        let mut iter = Lexer::new("hello **world**").into_iter();
+        assert_eq!(Some(Token::Text("hello ".to_string())), iter.next());
+        assert_eq!(Some(Token::Strong("world".to_string())), iter.next());
+    }
+
+    #[test]
+    fn tokenizes_paragraph_starting_with_bold() {
+        let mut iter = Lexer::new("**bold** text!").into_iter();
+        assert_eq!(Some(Token::Strong("bold".to_string())), iter.next());
+        assert_eq!(Some(Token::Text(" text!".to_string())), iter.next());
+    }
+
+    #[test]
+    fn tokenizes_em_within_paragraph() {
+        let mut iter = Lexer::new("hello *world*").into_iter();
+        assert_eq!(Some(Token::Text("hello ".to_string())), iter.next());
+        assert_eq!(Some(Token::Em("world".to_string())), iter.next());
+    }
+
+    #[test]
+    fn tokenizes_em_and_strong_within_paragraph() {
+        let mut iter = Lexer::new("**bold** text, and *italic* text!").into_iter();
+        assert_eq!(Some(Token::Strong("bold".to_string())), iter.next());
+        assert_eq!(Some(Token::Text(" text, and ".to_string())), iter.next());
+        assert_eq!(Some(Token::Em("italic".to_string())), iter.next());
+        assert_eq!(Some(Token::Text(" text!".to_string())), iter.next());
+    }
+
+    #[test]
+    fn tokenizes_em_with_underscores() {
+        let mut iter = Lexer::new("**bold** text, and _italic_ text!").into_iter();
+        assert_eq!(Some(Token::Strong("bold".to_string())), iter.next());
+        assert_eq!(Some(Token::Text(" text, and ".to_string())), iter.next());
+        assert_eq!(Some(Token::Em("italic".to_string())), iter.next());
+        assert_eq!(Some(Token::Text(" text!".to_string())), iter.next());
+    }
+
+    #[test]
+    fn tokenizes_unordered_list() {
+        let mut iter = Lexer::new("some text followed by\n* item 1\n* item 2").into_iter();
         assert_eq!(
-            Lexer::new("# Hello world\n`struct Foo {}`").lex(),
-            vec![
-                Token::Heading(("#".to_string(), "Hello world".to_string())),
-                Token::Code("struct Foo {}".to_string())
-            ],
+            Some(Token::Text("some text followed by".to_string())),
+            iter.next()
         );
+        assert_eq!(Some(Token::NewLine), iter.next());
+        assert_eq!(Some(Token::List(ListType::Unordered)), iter.next());
+        assert_eq!(Some(Token::Text("item 1".to_string())), iter.next());
+        assert_eq!(Some(Token::NewLine), iter.next());
+        assert_eq!(Some(Token::List(ListType::Unordered)), iter.next());
+        assert_eq!(Some(Token::Text("item 2".to_string())), iter.next());
+    }
+
+    #[test]
+    fn tokenizes_ordered_list() {
+        let mut iter = Lexer::new("some text followed by\n1. item 1\n2. item 2").into_iter();
+        assert_eq!(
+            Some(Token::Text("some text followed by".to_string())),
+            iter.next()
+        );
+        assert_eq!(Some(Token::NewLine), iter.next());
+        assert_eq!(Some(Token::List(ListType::Ordered)), iter.next());
+        assert_eq!(Some(Token::Text("item 1".to_string())), iter.next());
+        assert_eq!(Some(Token::NewLine), iter.next());
+        assert_eq!(Some(Token::List(ListType::Ordered)), iter.next());
+        assert_eq!(Some(Token::Text("item 2".to_string())), iter.next());
     }
 }
